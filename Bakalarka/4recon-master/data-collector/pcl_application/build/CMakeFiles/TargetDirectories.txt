@@ -1,3 +1,0 @@
-/home/simon/Bakalarka/pcl_application/build/CMakeFiles/rebuild_cache.dir
-/home/simon/Bakalarka/pcl_application/build/CMakeFiles/edit_cache.dir
-/home/simon/Bakalarka/pcl_application/build/CMakeFiles/cloud_viewer.dir
