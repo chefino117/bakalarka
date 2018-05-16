@@ -1,14 +1,14 @@
-#### Bakalárska práca 2017/2018 VUT FIT Brno
-### Street view pomocou mobilnej senzorickej platformy
+# Bakalárska práca 2017/2018 VUT FIT Brno
+## Street view pomocou mobilnej senzorickej platformy
 
-# Informácie
+### Informácie
 
 Priečinok obsahuje dve aplikácie
 
   - /video_recording
   - /virtual_tours
 
-# Video Recording
+### Video Recording
 
 Táto aplikácia je spustiteľná iba s príslušnými hardvérovými zariadeniami a softvérovými aplikáciami. Aplikácia bola integrovaná do senzorickej platformy na mapovanie budov.
 
@@ -23,7 +23,7 @@ Potrebné knižnice:
   - ROS
   - ...
 
-# Virtual Tour
+### Virtual Tour
 
 Táto aplikácia bola testovaná na zariadení Xampp. Na serveri je potrebné nastaviť limit veľkosti nahrávaných súborov a povolenia pre aplikáciu *ffmpeg*. 
 Ďalej je potrebná inštalácia spomínanej aplikácie *ffmpeg*: https://www.ffmpeg.org/ 
