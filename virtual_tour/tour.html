@@ -1,0 +1,660 @@
+<!--
+Copyright 2018 Simon Hrabos. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE FREEBSD PROJECT "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.IN NO EVENT SHALL THE FREEBSD PROJECT OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+-->
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Virtual Tour</title>
+    <link rel="stylesheet" href="https://cdn.pannellum.org/2.4/pannellum.css"/>
+    <script type="text/javascript" src="https://cdn.pannellum.org/2.4/pannellum.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.2.2/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r79/three.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+    <style>
+    #panorama {
+        float:left;
+        width: 620px;
+        height: 420px;
+    }
+    </style>
+</head>
+<body>
+<div id="titles">
+<h1 id="title"></h1>
+<div>
+<div id= "newtour">
+<button id="back" onclick="goBack()">New tour</button>
+</div>
+
+
+<div id="panorama"></div>
+<script>
+
+var global = "";
+function load_last_tour(file)   //we need to recognize which vitual tour is running
+{
+    var f = new XMLHttpRequest();
+    f.open("GET", file, false);
+    f.onreadystatechange = function ()
+    {
+        if(f.readyState === 4)
+        {
+            if(f.status === 200 || f.status == 0)
+            {
+                var res = f.responseText;
+                var lines = res.split("\n");
+                window.global = lines[0];
+                document.getElementById("title").innerHTML = lines[0];
+                var first = lines[0].concat("/thumb0001.jpg");  //first showed panorama photo, always first extracted photo from video
+                pannellum.viewer('panorama', {
+                    "type": "equirectangular",
+                    "panorama": first,
+                    "autoLoad": true,
+                    "compass": true,
+                    "northOffset": 0
+                });
+            }
+        }
+    }
+    f.send(null);
+}
+
+load_last_tour("last_tour.txt");
+</script>
+<canvas id="myCanvas" width="620" height="420"
+style="border:1px solid #c3c3c3 ;">
+Your browser does not support the canvas element.
+</canvas>
+<div id = "whole">
+<div id="list">
+<ul>
+    <li>White +- (scale)</li>
+    <li>White arrows (moving)</li>
+    <li>Black arrows (rotation)</li>
+</ul>
+</div>
+<div id="move">
+        <button id="plus" onclick="scaleIncrease()" style="border: 0;"></button>
+        <button id="up" onclick="moveUp()" style="border: 0;"></button>
+        <div id="middle">
+            <button id="left" onclick="moveLeft()" style="border: 0;"></button>
+            <button id="right" onclick="moveRight()" style="border: 0;"></button>
+        </div>
+        <button id="minus"onclick="scaleDecrease()" style="border: 0;"></button>
+        <button id="down" onclick="moveDown()" style="border: 0;"></button>
+</div>
+
+<div id="rotate">
+        <button id="hore" onclick="rotation_x_increase()" style="border: 0;"></button>
+        <div id="middle">
+            <button id="vlavo" onclick="rotation_y_increase()" style="border: 0;"></button>
+            <button id="vpravo" onclick="rotation_y_decrease()" style="border: 0;"></button>
+        </div>
+        <button id="dole" onclick="rotation_x_decrease()" style="border: 0;"></button>
+</div>
+</div>
+<script>
+
+function getWidth() {
+  return Math.max(
+    document.body.scrollWidth,
+    document.documentElement.scrollWidth,
+    document.body.offsetWidth,
+    document.documentElement.offsetWidth,
+    document.documentElement.clientWidth
+  );
+}
+
+function getHeight() {
+  return Math.max(
+    document.body.scrollHeight,
+    document.documentElement.scrollHeight,
+    document.body.offsetHeight,
+    document.documentElement.offsetHeight,
+    document.documentElement.clientHeight
+  );
+}
+var f_width = getWidth();
+
+var window_width = f_width/2 - 20; //for getting browser resolution
+window_width = window_width.toString();
+window_width_str = window_width.concat("px");
+var window_height = window.screen.availHeight - window.screen.availHeight/3 - 50;
+window_height = window_height.toString();
+window_height_str = window_height.concat("px");
+document.getElementById("panorama").style.width = window_width_str; //set canvas and pannellum size
+document.getElementById("panorama").style.height = window_height_str;
+document.getElementById("myCanvas").width = window_width;
+document.getElementById("myCanvas").height = window_height;
+
+
+var path = global.concat("/");
+path = path.concat(global);
+path = path.concat(".txt");
+
+var canvas = document.getElementById("myCanvas");   //new canvas for trajectory
+canvas.addEventListener("mousedown", getPosition, false);
+var canvasWidth = canvas.width;
+var canvasHeight = canvas.height;
+var ctx = canvas.getContext("2d");
+var canvasData = ctx.getImageData(0, 0, canvasWidth, canvasHeight);
+var scale = 2;
+var scale_control = 1; 
+if (f_width >1400){    //when there is big resolotion, we need to make points bigger, bor better visibility
+    scale = 4;
+}
+
+function goBack () {    //back to the tour generator
+    window.open("index.php", "_self");
+} 
+
+function drawPixel (x, y, r, g, b, a) { //draw simple pixel
+    var index = (x + y * canvasWidth) * 4;
+
+    canvasData.data[index + 0] = r;
+    canvasData.data[index + 1] = g;
+    canvasData.data[index + 2] = b;
+    canvasData.data[index + 3] = a;
+}
+
+function drawPoint (x, y, r, g, b, a, scale) {  //draw one point, made of more pixels
+    if (scale > 1){
+        var iterations = scale * 2 - 1;
+        var temp;
+        for (var i = 0; i < iterations; i++){
+            temp = - scale;
+            for (var j = 0; j < iterations; j++){
+                drawPixel(x + temp,y + i,r,g,b,a);
+                temp++;
+            }
+        }
+        
+    }
+    else{
+        drawPixel(x,y,r,g,b,a);
+    }
+    updateCanvas();
+}
+
+function updateCanvas() {   //after canvas drawing, we need to update it
+    ctx.putImageData(canvasData, 0, 0);
+}
+
+function clearCanvas() {    //clearing canvas
+    for (var i = 0; i < window_width; i++){
+        for (var y = 0; y < window_height; y++){
+            drawPixel(i, y, 255, 255, 255, 255);
+        }
+    }
+    updateCanvas();
+}
+
+var multiply_x = 0; //global variables
+var multiply_y = 0;
+var width;
+var height;
+var global_min_x = 100;
+var global_max_x = -100
+var global_min_y = 100;
+var global_max_y = -100;
+
+function readFirstTime(file)    //first page load, first trajectory drawing
+{
+    var min_x = 100;
+    var max_x = -100
+    var min_y = 100;
+    var max_y = -100;
+    var remember_x;
+    var remember_y;
+    var f = new XMLHttpRequest();
+    f.open("GET", file, false);
+    f.onreadystatechange = function ()
+    {
+        if(f.readyState === 4)
+        {
+            if(f.status === 200 || f.status == 0)
+            {
+                var res = f.responseText;
+                var lines = res.split("\n");
+                window.poses = lines;
+                for(var i = 0; i < lines.length; i++){  //getting smallest and biggest point corrdinates
+                    var coordinates = lines[i].split(" ");
+                    var x = Number(coordinates[3]);
+                    var y = Number(coordinates[7]);
+                    if (x < min_x){
+                        min_x = x;
+                    }
+                    if (x > max_x){
+                        max_x = x;
+                    }
+                    if (y < min_y){
+                        min_y = y;
+                    }
+                    if (y > max_y){
+                        max_y = y;
+                    }
+                }
+                global_min_x = min_x;
+                global_max_x = max_x
+                global_min_y = min_y;
+                global_max_y = max_y;
+                width = Math.abs(min_x) + Math.abs(max_x);
+                height = Math.abs(min_y) + Math.abs(max_y);
+                multiply_x = (window_width - 20)/ width;    //we need to multiply every point pf trajectory with this numbers (x, y, coordinates)
+                multiply_y = (window_height - 20)/ height;
+                for(var i = 0; i < lines.length; i++){  //drawing points
+                    var coordinates = lines[i].split(" ");
+                    var x = Number(coordinates[3]);
+                    var y = Number(coordinates[7]);
+                    var draw_x = ((x + Math.abs(min_x)) * multiply_x) + 10;
+                    var draw_y = ((y + Math.abs(min_y)) * multiply_y) + 10;
+                    if (i == 0){
+                        remember_x = draw_x;
+                        remember_y = draw_y;
+                    }
+                    else {
+                        drawPoint(Math.round(draw_x), Math.round(draw_y), 255, 0, 0, 255, scale);
+                    }
+                }
+                if (f_width > 1400){
+                    drawPoint(Math.round(remember_x), Math.round(remember_y), 50, 205, 50, 255, 8);
+                }
+                else{
+                    drawPoint(Math.round(remember_x), Math.round(remember_y), 50, 205, 50, 255, 4);
+                }
+                updateCanvas();
+            }
+        }
+    }
+    f.send(null);
+}
+
+function readPoses(scale)   //function for points drawing
+{
+    var min_x = 100;
+    var max_x = -100
+    var min_y = 100;
+    var max_y = -100;
+    clearCanvas();
+    lines = window.poses;
+
+
+    for(var i = 0; i < lines.length; i++){  //getting smallest and biggest point corrdinates
+        var coordinates = lines[i].split(" ");
+        var x = Number(coordinates[3]);
+        var y = Number(coordinates[7]);
+        if (x < min_x){
+            min_x = x;
+        }
+        if (x > max_x){
+            max_x = x;
+        }
+        if (y < min_y){
+            min_y = y;
+        }
+        if (y > max_y){
+            max_y = y;
+        }
+    }
+    global_min_x = min_x;
+    global_max_x = max_x
+    global_min_y = min_y;
+    global_max_y = max_y;
+    multiply_x = (window_width - 20)/ width;    //we need to multiply every point pf trajectory with this numbers (x, y, coordinates)
+    multiply_y = (window_height - 20)/ height;
+    for(var i = 0; i < lines.length; i++){
+        var coordinates = lines[i].split(" ");
+        var x = Number(coordinates[3]);
+        var y = Number(coordinates[7]);
+        var draw_x = ((x + Math.abs(min_x)) * multiply_x) + 10;
+        var draw_y = ((y + Math.abs(min_y)) * multiply_y) + 10;
+        if (draw_x < window_width - 10 && draw_x > 10 && draw_y < window_height && draw_y > 10){    //there is small emmty place around canvas border
+            drawPoint(Math.round(draw_x), Math.round(draw_y), 255, 0, 0, 255, scale);
+        }
+    }
+    updateCanvas();
+}
+
+function readPoses2(scale)   //function for points drawing but without changind width and height
+{
+    clearCanvas();
+    lines = window.poses;
+    multiply_x = (window_width - 20)/ width;    //we need to multiply every point pf trajectory with this numbers (x, y, coordinates)
+    multiply_y = (window_height - 20)/ height;
+    for(var i = 0; i < lines.length; i++){
+        var coordinates = lines[i].split(" ");
+        var x = Number(coordinates[3]);
+        var y = Number(coordinates[7]);
+        var draw_x = ((x + Math.abs(global_min_x)) * multiply_x) + 10;
+        var draw_y = ((y + Math.abs(global_min_y)) * multiply_y) + 10;
+        if (draw_x < window_width - 10 && draw_x > 10 && draw_y < window_height && draw_y > 10){    //there is small emmty place around canvas border
+            drawPoint(Math.round(draw_x), Math.round(draw_y), 255, 0, 0, 255, scale);
+        }
+    }
+    updateCanvas();
+}
+
+readFirstTime(path);    // Do the request
+
+function change_image(coord_x, coord_y, scale)  //function for green foint drawing (actual point)
+{
+    var path = window.global;
+    var short_path = path.concat("/");
+    path = short_path.concat(window.global);
+    path = path.concat(".txt");
+    var lines = window.poses;
+    var min = 20;
+    if (scale_control > 1){
+        min = 20 * scale_control;
+    }
+    var index = 1;
+    var final_x;
+    var final_y;
+    for(var i = 0; i < lines.length; i++){      //get index of changed point, for photo recognition
+        var coordinates = lines[i].split(" ");
+        var draw_x = Number(coordinates[3]);
+        var draw_y = Number(coordinates[7]);
+        draw_x = ((draw_x + Math.abs(global_min_x)) * multiply_x) + 10;
+        draw_y = ((draw_y + Math.abs(global_min_y)) * multiply_y) + 10;
+        var temp_x = Math.abs(coord_x - draw_x);
+        var temp_y = Math.abs(coord_y - draw_y);
+        var temp = temp_x + temp_y;
+        if (temp < min){
+            min = temp;
+            index = i + 1;
+            final_x = draw_x;
+            final_y = draw_y;
+        }
+    }
+    var thumb;
+    var number = index.toString();
+    if (index < 10){
+        thumb = "thumb000";
+        thumb = thumb.concat(number);
+    }
+    else if (index < 100) {
+        thumb = "thumb00";
+        thumb = thumb.concat(number);
+    }
+    else if (index < 1000) {
+        thumb = "thumb0";
+        thumb = thumb.concat(number);
+    }
+    else {
+        thumb = "thumb";
+        thumb = thumb.concat(number);
+    }
+    var jpg = ".jpg";
+    thumb = short_path.concat(thumb);
+    thumb = thumb.concat(jpg);
+
+    if (final_x != null){       //change panoramic photo
+        pannellum.viewer('panorama', {
+            "type": "equirectangular",
+            "panorama": thumb,
+            "autoLoad": true,
+            "compass": true,
+            "northOffset": 0
+        });
+        clearCanvas();
+        readPoses2(scale);
+        drawPoint(Math.round(final_x), Math.round(final_y), 50, 205, 50, 255, scale * 2);
+        updateCanvas();
+    }
+}
+
+window.onscroll = function (e) {
+    window.scrollY; // Value of scroll Y in px
+};
+
+var mouseDown = false;
+function getPosition(event) //get actual cursor position
+{
+    mouseDown = true;
+    var path = window.global;
+    var short_path = path.concat("/");
+    path = short_path.concat(window.global);
+    path = path.concat(".txt");
+    var x = new Number();
+    var y = new Number();
+    var canvas = document.getElementById("myCanvas");
+
+    if (event.x != undefined && event.y != undefined)
+    {
+        x = event.x;
+        y = event.y;
+    }
+    else // Firefox method to get the position
+    {
+        x = event.clientX + document.body.scrollLeft + document.documentElement.scrollLeft;
+        y = event.clientY + document.body.scrollTop + document.documentElement.scrollTop;
+    }
+
+    x -= canvas.offsetLeft;
+    y -= canvas.offsetTop;
+    y += window.scrollY;
+    change_image(x, y, scale);  //when canvas clicked, change image 
+}
+
+function rotation_x_increase() {        //aplly rotation matrix around x axis (+)
+    var lines = window.poses;
+
+    for(var i = 0; i < lines.length; i++){
+        var coordinates = lines[i].split(" ");
+        var x = coordinates[3];
+        var y = coordinates[7];
+        var z = coordinates[11];
+
+        var vec = new THREE.Vector4( x, y, z, 1 );
+        var res_y = vec.y * Math.cos(3 * (Math.PI/180)) + vec.z * Math.sin(-(3 * (Math.PI/180)));
+        var res_z = vec.y * Math.sin((3 * (Math.PI/180))) + vec.z * Math.cos(3 * (Math.PI/180));
+        var res = coordinates[0].concat(" ").concat(coordinates[1]).concat(" ").concat(coordinates[2]).concat(" ").concat(coordinates[3]).concat(" ").concat(coordinates[4]).concat(" ").concat(coordinates[5]).concat(" ").concat(coordinates[6]).concat(" ").concat(res_y).concat(" ").concat(coordinates[8]).concat(" ").concat(coordinates[9]).concat(" ").concat(coordinates[10]).concat(" ").concat(res_z);
+        window.poses[i] = res;
+    }
+    readPoses(scale);
+}
+
+function rotation_x_decrease() {    //aplly rotation matrix around x axis (-)
+    var lines = window.poses;
+
+    for(var i = 0; i < lines.length; i++){
+        var coordinates = lines[i].split(" ");
+        var x = coordinates[3];
+        var y = coordinates[7];
+        var z = coordinates[11];
+
+        var vec = new THREE.Vector4( x, y, z, 1 );
+        var res_y = vec.y * Math.cos(-3 * (Math.PI/180)) + vec.z * Math.sin(-(-3 * (Math.PI/180)));
+        var res_z = vec.y * Math.sin(-3 * (Math.PI/180)) + vec.z * Math.cos(-3 * (Math.PI/180));
+        var res = coordinates[0].concat(" ").concat(coordinates[1]).concat(" ").concat(coordinates[2]).concat(" ").concat(coordinates[3]).concat(" ").concat(coordinates[4]).concat(" ").concat(coordinates[5]).concat(" ").concat(coordinates[6]).concat(" ").concat(res_y).concat(" ").concat(coordinates[8]).concat(" ").concat(coordinates[9]).concat(" ").concat(coordinates[10]).concat(" ").concat(res_z);
+        window.poses[i] = res;
+    }
+    readPoses(scale);
+}
+
+function rotation_y_increase() { //aplly rotation matrix around y axis (+)
+    var lines = window.poses;
+
+    for(var i = 0; i < lines.length; i++){
+        var coordinates = lines[i].split(" ");
+        var x = coordinates[3];
+        var y = coordinates[7];
+        var z = coordinates[11];
+
+        var vec = new THREE.Vector4( x, y, z, 1 );
+        var res_x = vec.x * Math.cos(3 * (Math.PI/180)) + vec.z * Math.sin(-(3 * (Math.PI/180)));
+        var res_z = vec.x * Math.sin(3 * (Math.PI/180)) + vec.z * Math.cos(3 * (Math.PI/180));
+        var res = coordinates[0].concat(" ").concat(coordinates[1]).concat(" ").concat(coordinates[2]).concat(" ").concat(res_x).concat(" ").concat(coordinates[4]).concat(" ").concat(coordinates[5]).concat(" ").concat(coordinates[6]).concat(" ").concat(coordinates[7]).concat(" ").concat(coordinates[8]).concat(" ").concat(coordinates[9]).concat(" ").concat(coordinates[10]).concat(" ").concat(res_z);
+        window.poses[i] = res;
+    }
+    readPoses(scale);
+}
+
+function rotation_y_decrease() {    //aplly rotation matrix around y axis (-)
+    var lines = window.poses;
+
+    for(var i = 0; i < lines.length; i++){
+        var coordinates = lines[i].split(" ");
+        var x = coordinates[3];
+        var y = coordinates[7];
+        var z = coordinates[11];
+
+        var vec = new THREE.Vector4( x, y, z, 1 );
+        var res_x = vec.x * Math.cos(-3 * (Math.PI/180)) + vec.z * Math.sin(-(-3 * (Math.PI/180)));
+        var res_z = vec.x * Math.sin(-3 * (Math.PI/180)) + vec.z * Math.cos(-3 * (Math.PI/180));
+        var res = coordinates[0].concat(" ").concat(coordinates[1]).concat(" ").concat(coordinates[2]).concat(" ").concat(res_x).concat(" ").concat(coordinates[4]).concat(" ").concat(coordinates[5]).concat(" ").concat(coordinates[6]).concat(" ").concat(coordinates[7]).concat(" ").concat(coordinates[8]).concat(" ").concat(coordinates[9]).concat(" ").concat(coordinates[10]).concat(" ").concat(res_z);
+        window.poses[i] = res;
+    }
+    readPoses(scale);
+}
+
+function scaleIncrease() {      //aplly scale matrix (+)
+    scale_control++;
+    if (f_width > 1400){
+        if (scale_control >= 1){
+            scale = scale * 2;
+        }
+    }
+    if (f_width < 1400){
+        if (scale_control > 1){
+            scale = scale * 2;
+        }
+    }
+    var lines = window.poses;   
+
+    for(var i = 0; i < lines.length; i++){
+        var coordinates = lines[i].split(" ");
+        var x = coordinates[3];
+        var y = coordinates[7];
+        var z = coordinates[11];
+        var vec = new THREE.Vector4( x, y, z, 1 );
+        var res_x = vec.x * 2;
+        var res_y = vec.y * 2;
+        var res_z = vec.z * 2;
+        var res = coordinates[0].concat(" ").concat(coordinates[1]).concat(" ").concat(coordinates[2]).concat(" ").concat(res_x).concat(" ").concat(coordinates[4]).concat(" ").concat(coordinates[5]).concat(" ").concat(coordinates[6]).concat(" ").concat(res_y).concat(" ").concat(coordinates[8]).concat(" ").concat(coordinates[9]).concat(" ").concat(coordinates[10]).concat(" ").concat(res_z);
+        window.poses[i] = res;
+    }
+    readPoses(scale);
+}
+
+function scaleDecrease(){   //aplly scale matrix (-)
+    scale_control--;
+    if (scale >= 3){
+        scale = scale/2;
+    }
+    var lines = window.poses;
+
+    for(var i = 0; i < lines.length; i++){
+        var coordinates = lines[i].split(" ");
+        var x = coordinates[3];
+        var y = coordinates[7];
+        var z = coordinates[11];
+        var vec = new THREE.Vector4( x, y, z, 1 );
+        var res_x = vec.x * 0.5;
+        var res_y = vec.y * 0.5;
+        var res_z = vec.z * 0.5;
+        var res = coordinates[0].concat(" ").concat(coordinates[1]).concat(" ").concat(coordinates[2]).concat(" ").concat(res_x).concat(" ").concat(coordinates[4]).concat(" ").concat(coordinates[5]).concat(" ").concat(coordinates[6]).concat(" ").concat(res_y).concat(" ").concat(coordinates[8]).concat(" ").concat(coordinates[9]).concat(" ").concat(coordinates[10]).concat(" ").concat(res_z);
+        window.poses[i] = res;
+    }
+    readPoses(scale);
+}
+
+function moveLeft(){   
+    var lines = window.poses;
+
+    for(var i = 0; i < lines.length; i++){
+        var coordinates = lines[i].split(" ");
+        var x = coordinates[3];
+        var y = coordinates[7];
+        var z = coordinates[11];
+        var vec = new THREE.Vector4( x, y, z, 1 );
+        if (scale_control > 0){
+            var res_x = vec.x * 1 + vec.w * (0.6 / scale_control);  
+        }
+        else{
+            var res_x = vec.x * 1 + vec.w * (0.6);
+        }
+        var res = coordinates[0].concat(" ").concat(coordinates[1]).concat(" ").concat(coordinates[2]).concat(" ").concat(res_x).concat(" ").concat(coordinates[4]).concat(" ").concat(coordinates[5]).concat(" ").concat(coordinates[6]).concat(" ").concat(coordinates[7]).concat(" ").concat(coordinates[8]).concat(" ").concat(coordinates[9]).concat(" ").concat(coordinates[10]).concat(" ").concat(coordinates[11]);
+        window.poses[i] = res;
+    }
+    readPoses2(scale);
+}
+
+function moveRight(){
+    var lines = window.poses;
+
+    for(var i = 0; i < lines.length; i++){
+        var coordinates = lines[i].split(" ");
+        var x = coordinates[3];
+        var y = coordinates[7];
+        var z = coordinates[11];
+        var vec = new THREE.Vector4( x, y, z, 1 );
+        if (scale_control > 0){
+            var res_x = vec.x * 1 + vec.w * (-0.6 / scale_control);  
+        }
+        else{
+            var res_x = vec.x * 1 + vec.w * (-0.6);
+        }
+        var res = coordinates[0].concat(" ").concat(coordinates[1]).concat(" ").concat(coordinates[2]).concat(" ").concat(res_x).concat(" ").concat(coordinates[4]).concat(" ").concat(coordinates[5]).concat(" ").concat(coordinates[6]).concat(" ").concat(coordinates[7]).concat(" ").concat(coordinates[8]).concat(" ").concat(coordinates[9]).concat(" ").concat(coordinates[10]).concat(" ").concat(coordinates[11]);
+        window.poses[i] = res;
+    }
+    readPoses2(scale);
+}
+
+function moveUp(){
+    var lines = window.poses;
+
+    for(var i = 0; i < lines.length; i++){
+        var coordinates = lines[i].split(" ");
+        var x = coordinates[3];
+        var y = coordinates[7];
+        var z = coordinates[11];
+        var vec = new THREE.Vector4( x, y, z, 1 );
+        if (scale_control > 0){
+            var res_y = vec.y * 1 + vec.w * (0.2 / scale_control);  
+        }
+        else{
+            var res_y = vec.y * 1 + vec.w * (0.09); 
+        }
+        var res = coordinates[0].concat(" ").concat(coordinates[1]).concat(" ").concat(coordinates[2]).concat(" ").concat(coordinates[3]).concat(" ").concat(coordinates[4]).concat(" ").concat(coordinates[5]).concat(" ").concat(coordinates[6]).concat(" ").concat(res_y).concat(" ").concat(coordinates[8]).concat(" ").concat(coordinates[9]).concat(" ").concat(coordinates[10]).concat(" ").concat(coordinates[11]);
+        window.poses[i] = res;
+    }
+    readPoses2(scale);
+}
+
+function moveDown(){
+    var lines = window.poses;
+
+    for(var i = 0; i < lines.length; i++){
+        var coordinates = lines[i].split(" ");
+        var x = coordinates[3];
+        var y = coordinates[7];
+        var z = coordinates[11];
+        var vec = new THREE.Vector4( x, y, z, 1 );
+        if (scale_control > 0){
+            var res_y = vec.y * 1 + vec.w * (-0.2 / scale_control);  
+        }
+        else{
+            var res_y = vec.y * 1 + vec.w * (-0.09);
+        }
+        var res = coordinates[0].concat(" ").concat(coordinates[1]).concat(" ").concat(coordinates[2]).concat(" ").concat(coordinates[3]).concat(" ").concat(coordinates[4]).concat(" ").concat(coordinates[5]).concat(" ").concat(coordinates[6]).concat(" ").concat(res_y).concat(" ").concat(coordinates[8]).concat(" ").concat(coordinates[9]).concat(" ").concat(coordinates[10]).concat(" ").concat(coordinates[11]);
+        window.poses[i] = res;
+    }
+    readPoses2(scale);
+}
+
+</script>
+
+</body>
+</html>
